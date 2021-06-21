@@ -3,12 +3,19 @@
 *
 
 Diondp: Nedis 4 button FOB
+
+
+Edited by tsaaek to add doubletap function
 */
+
+
+
 import hubitat.zigbee.zcl.DataType
 
 metadata {
-definition (name: "Nedis Zigbee 4 Button Fob", namespace: "Diondp", author: "Diondp") {
+definition (name: "Nedis Zigbee 4 Button Fob Doubletap", namespace: "Diondp", author: "Diondp") {
 capability "PushableButton"
+capability "DoubleTapableButton"
 capability "Configuration"
 
     fingerprint inClusters: "0000,0001,0500,0501", outClusters: "0019,000A", manufacturer: "_TZ3000_fsiepnrh", model: "TS0215A"
@@ -35,11 +42,14 @@ state.start = now()
 }
 
 def updated() {
+state.clicks = 0
+state.lastBtn = 0
 sendButtonNumber()
 }
 
 def configure() {
 sendButtonNumber()
+	clicks = 0
 
 def configCmds = []
 for (int endpoint=1; endpoint<=3; endpoint++) {
@@ -60,7 +70,8 @@ if ((description?.startsWith("catchall:")) || (description?.startsWith("read att
         log.debug("Message Map: '$parsedMap'")
     }
    
-     name = "pushed"
+		
+     //name = "pushed"
     switch(parsedMap.data) {
         
         case "[00, 00, FF]": 
@@ -79,10 +90,40 @@ if ((description?.startsWith("catchall:")) || (description?.startsWith("read att
         case "[]": 
             button = "1" 
             break
-
+    }
+	
+	    state.clicks++
+		    
+		    
+	    if(state.clicks == 1){
+		    
+		def name = "pushed"
+		    runInMillis(300, 'eventSender', [data:[name, button]])
+		
+	    }
+	    else if(state.clicks == 2 && state.lastBtn == button){
+		 def name = "doubleTapped"
+		 unschedule(eventSender)
+		 eventSender(name, button)
+			
+	    }
+	else {
+	state.clicks = 0	
+	}
+		state.lastBtn = button
+	
+	  
 }
 
-    sendEvent(name: name, value: button, descriptionText: "Button $button was $name",isStateChange:true)
-}
+
+
 return
+}
+
+def eventSender(name, button){
+	if (debugEnable){
+	log.debug "Button " + button + " " + name
+	}
+	    sendEvent(name: name, value: button, descriptionText: "Button $button was $name",isStateChange:true)
+	state.clicks = 0
 }
