@@ -1,0 +1,88 @@
+/**
+*
+*
+
+Diondp: Nedis 4 button FOB
+*/
+import hubitat.zigbee.zcl.DataType
+
+metadata {
+definition (name: "Nedis Zigbee 4 Button Fob", namespace: "Diondp", author: "Diondp") {
+capability "PushableButton"
+capability "Configuration"
+
+    fingerprint inClusters: "0000,0001,0500,0501", outClusters: "0019,000A", manufacturer: "_TZ3000_fsiepnrh", model: "TS0215A"
+  
+}
+preferences {
+input name: "debugEnable", type: "bool", title: "Enable debug logging", defaultValue: false
+}
+
+}
+
+private sendButtonNumber() {
+def remoteModel = device.getDataValue("model")
+switch(remoteModel){
+case "TS0215A":
+sendEvent(name: "numberOfButtons", value: 4, isStateChange: true)
+break
+}
+}
+
+def installed() {
+sendButtonNumber()
+state.start = now()
+}
+
+def updated() {
+sendButtonNumber()
+}
+
+def configure() {
+sendButtonNumber()
+
+def configCmds = []
+for (int endpoint=1; endpoint<=3; endpoint++) {
+def list = ["0006", "0001", "0000","0500","0501"]
+// the config to the switch
+for (cluster in list) {
+configCmds.add("zdo bind 0x${device.deviceNetworkId} 0x0${endpoint} 0x01 0x${cluster} {${device.zigbeeId}} {}")
+}
+}
+return configCmds
+}
+
+def parse(String description) {
+
+if ((description?.startsWith("catchall:")) || (description?.startsWith("read attr -"))) {
+    def parsedMap = zigbee.parseDescriptionAsMap(description)
+    if (debugEnable){
+        log.debug("Message Map: '$parsedMap'")
+    }
+   
+     name = "pushed"
+    switch(parsedMap.data) {
+        
+        case "[00, 00, FF]": 
+            //button = "B"
+            //WebCore friendly
+            button = "4"
+            break
+        case "[01, 00, FF]": 
+           //button = "A"
+           //WebCore friendly
+            button = "3"
+        break
+        case "[03, 00, FF]": 
+            button = "2"
+            break
+        case "[]": 
+            button = "1" 
+            break
+
+}
+
+    sendEvent(name: name, value: button, descriptionText: "Button $button was $name",isStateChange:true)
+}
+return
+}
